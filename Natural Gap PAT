@@ -1,0 +1,410 @@
+STRATEGY_NAME 	= "NATGASmini Test";
+ACCOUNTS = "NSMTest";
+CAPITALS = "1000000";
+MARGIN_PER_LOT = 10000;
+INR_TO_USD = 85;
+RISK_PRC = 0.03;
+
+auto = ParamToggle( "AUTO", "OFF|ON" );
+
+#include <autotrader.afl>
+#include <mpw_utilities.afl>
+
+_SECTION_BEGIN( "Crypto PAT" );
+
+SetChartOptions( 0, chartShowArrows | chartShowDates );
+_N( Title = StrFormat( "{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, Hi %g, Lo %g, Close %g (%.1f%%) {{VALUES}}", O, H, L, C, SelectedValue( ROC( C, 1 ) ) ) );
+
+newday = Day() != Ref( Day(), -1 ) ;
+lastcandle1 = Flip( Ref( newday, -12 ), newday );
+lastcandle = 0;
+
+period = 6;
+
+//EM = ( LinearReg( C, 20 ) + ema( C, 100 ) ) / 2;
+EM = ( LinearReg( C, 50 ));//For ETHUSD
+//EM = ema(C,100);
+Resistance = Ref( HHV( H, period ), -1 );
+Suppport = Ref( LLV( L, period ), -1 );
+
+iBuy = H > Resistance ;
+iShort = L < Suppport ;
+iCover = Cross( H, Resistance )  ;
+iSell = Cross( Suppport, Low ) ;
+
+iBuy = ExRem( iBuy, isell );
+iShort = ExRem( iShort, iCover );
+iSell = ExRem( iSell, iBuy );
+iCover = ExRem( iCover, iShort );
+
+color = ( IIf( Flip( iBuy, iSell ), colorGreen, colorRed ) );
+
+//pos = Ref(C > EM,-1)  ;
+//neg = Ref(C < EM,-1)  ;
+
+//pos = Ref(H>EM,-1)  ;
+//neg = Ref(L<EM,-1) ;
+
+neg = Ref( L < EM AND( ( em - L ) > ( L * 0.0002 ) ), -1 );
+pos = Ref( H > EM AND( ( h - em ) > ( h * 0.0002 ) ), -1 );
+
+buyzone = Flip( iBuy, iSell );
+f30mH = ValueWhen( newday, H );
+DH = HighestSince( newday, H );
+iBuyRE = Cross( H, f30mH ) AND buyzone ;
+iBuyRE = Cross( H, Ref( DH, -1 ) ) AND buyzone ;
+iBuyRE = Cross( H, Resistance ) AND buyzone ;
+
+shortzone = Flip( iShort, iCover );
+f30mL = ValueWhen( newday, L );
+DL = Lowestsince( newday, L );
+iShortRE = Cross( f30mL, L ) AND shortzone ;
+iShortRE = Cross( Ref( DL, -1 ), L ) AND shortzone ;
+iShortRE = Cross( Suppport, L ) AND shortzone ;
+
+AT = Ref( ATR( 10 ), -1 ) * 2.5; //ATR value
+AggressiveAT = AT * 1.5; //ATR value
+
+bts = HighestSince( iBuy , Ref( C, -1 ) - at );
+sts = LowestSince( iShort , Ref( C, -1 ) + at );
+
+bf = sf = 0 ;
+Buy = Sell = Short = Cover = Null ;
+stsl = 500000000;
+btsl = 0;
+
+gapu = newday AND  L > Resistance ;
+gapd = newday AND H < Suppport ;
+
+covergap = 0;
+sellgap = 0;
+
+TimeFrameSet( inDaily );
+DATR = ATR( 14 );
+TimeFrameRestore();
+
+DATR = TimeFrameExpand( DATR, inDaily );
+
+pdh = TimeFrameGetPrice( "H", inDaily, -1 );
+pdl = TimeFrameGetPrice( "L", inDaily, -1 );
+pdc = TimeFrameGetPrice( "C", inDaily, -1 );
+dopen = ValueWhen( newday, O );
+fcc = ValueWhen( newday, C );
+
+agrss_move = ( dh - dl ) > ( DATR * 2 );
+agrss_move = flip( agrss_move, newday );
+
+reversal_short = ( ( fcc < pdl ) AND( ( C > O ) AND( abs( H - C ) < abs( H - L ) * 0.3 ) ) ) AND( Flip( newday, Ref( newday, -4 ) ) );
+reversal_long = ( fcc > pdh ) AND( ( C < O ) AND( abs( L - C ) < abs( H - L ) * 0.3 ) ) AND( Flip( newday, Ref( newday, -4 ) ) );
+
+agb = 0;
+ags = 0;
+
+upt = ref( HighestSince( iBuy, H + ( DATR * 1.5 ) ), -1 );
+downt = ref( LowestSince( iShort, L - ( DATR * 1.5 ) ), -1 );
+reversal_long1 = Ref( H, -1 ) > ref( upt, -1 ) ;
+reversal_short1 = Ref( L, -1 ) < ref( downt, -1 );
+
+time = TimeNum();
+
+entryzone= time < 230000;
+
+for( i = 0; i < BarCount; i++ )
+{
+
+    if( ( H[i] > Resistance[i] OR iBuyRE[i] ) AND pos[i] AND NOT newday[i] AND entryzone[i] AND bf == 0 )
+    {
+        Buy[i] = 1;
+        bf = 1;
+
+        if( H[i] > Resistance[i] AND NOT gapu[i] ) BuyPrice[i] = Resistance[i];
+        else
+            if( iBuyRE[i] AND NOT gapu[i] ) BuyPrice[i] = Resistance[i ];
+            else
+                if( gapu[i] ) BuyPrice[i] = C[i];
+
+    }
+
+
+    if( ( agrss_move[i] )  AND agb == 0 )
+    {
+        agb = 1;
+    }
+
+
+    if( bf )
+    {
+
+        if( Buy[i] )
+        {
+            btsl[i] = bts[i] + ( AT[i] * 0.1 );
+        }
+        else
+            if( agb[i] AND NOT reversal_long1[i] )
+            {
+                btsl[i] = Max( bts[i] + ( AggressiveAT[i] * 0.7 ), btsl[i - 1] );
+
+                if( btsl[i] > o[i] )
+                {
+                    btsl[i] = btsl[i - 1];
+                }
+                else
+                {
+                    btsl[i] = btsl[i];
+                }
+            }
+            else
+                if( reversal_long[i - 1] )
+                {
+                    btsl[i] = Max( L[i - 1] - ( L[i - 1] * 0.001 ), btsl[i - 1] );
+                }
+                else
+                    if( reversal_long1[i] )
+                    {
+                        btsl[i] = Max( L[i] - ( L[i] * 0.0001 ), btsl[i - 1] );
+                    }
+                    else
+                    {
+                        btsl[i] = max( bts[i], btsl[i - 1] ) ; // Original
+                    }
+    }
+
+
+    if( ( iSell[i] OR L[i] < btsl[i] OR (time[i] > 230000) ) AND bf == 1 )
+    {
+        Sell[i] = 1;
+        bf = 0;
+        agb = 0;
+        sellgap[i] = gapd[i] OR( newday[i] AND H[i] < btsl[i] );
+
+        if( iSell[i] AND NOT sellgap[i] ) SellPrice[i] = Max( Suppport[i], btsl[i] );
+        else
+            if( L[i] < btsl[i] AND NOT sellgap[i] ) SellPrice[i] = btsl[i];
+            else
+                if( sellgap[i] ) SellPrice[i] = C[i];
+    }
+
+    if( ( L[i] < Suppport[i] OR iShortRE[i] ) AND neg[i] AND NOT newday[i] AND entryzone[i] AND sf == 0 )
+    {
+        Short[i] = 1;
+        sf = 1;
+
+        if( L[i] < Suppport[i] AND NOT gapd[i] ) shortprice[i] = Suppport[i];
+        else
+            if( iShortRE[i] AND NOT gapd[i] ) Shortprice[i] = Suppport[i];
+            else
+                if( gapd[i] ) Shortprice[i] = C[i];
+    }
+
+    if( ( agrss_move[i] ) AND ags == 0 )
+    {
+        ags = 1;
+    }
+
+
+    if( sf )
+    {
+        if( Short[i] )
+        {
+            stsl[i] = sts[i] - ( AT[i] * 0.1 );
+
+        }
+        else
+            if( ags[i] AND NOT reversal_short1[i] )
+            {
+                stsl[i] = min( sts[i] - ( AggressiveAT[i] * 0.7 ), stsl[i - 1] );
+
+                if( stsl[i] < o[i] )
+                {
+                    stsl[i] = stsl[i - 1];
+                }
+                else
+                {
+                    stsl[i] = stsl[i];
+                }
+            }
+
+            else
+                if( reversal_short[i - 1] )
+                {
+                    stsl[i] = Min( H[i - 1] + ( H[i - 1] * 0.001 ), stsl[i - 1] );
+                }
+                else
+                    if( reversal_short1[i] )
+                    {
+                        stsl[i] = Min( H[i] + ( H[i] * 0.0001 ), stsl[i - 1] );
+                    }
+                    else
+                    {
+                        stsl[i] = min( sts[i], stsl[i - 1] ) ;
+                    }
+    }
+
+    if( ( iCover[i] OR H[i] > stsl[i] OR (time[i] > 230000) ) AND sf == 1 )
+    {
+        cover[i] = 1;
+        sf = 0;
+        ags = 0;
+        covergap[i] = gapu[i] OR( newday[i] AND L[i] > stsl[i] );
+
+        if( iCover[i] AND NOT covergap[i] ) coverprice[i] = Min( Resistance[i], stsl[i] );
+        else
+            if( H[i] > stsl[i] AND NOT covergap[i] ) coverprice[i] = stsl[i];
+            else
+                if( covergap[i] ) coverprice[i] = C[i];
+    }
+}
+
+long = Flip( Buy, Sell );
+shrt = Flip( Short, Cover );
+
+BuyPrice = ValueWhen( Buy, BuyPrice );
+ShortPrice = ValueWhen( Short, ShortPrice );
+SellPrice = ValueWhen( Sell, SellPrice );
+CoverPrice = ValueWhen( Cover, CoverPrice );
+
+btsl = Max( Suppport, btsl );
+stsl = min( stsl, Resistance );
+
+Plot( IIf( shrt , stsl, Null ), "stsl", colorRed );
+Plot( IIf( long , btsl, Null ), "btsl", colorRed );
+
+//Plot(Resistance,"HHV",colorRed);
+//Plot(Suppport,"LLV",colorgreen);
+
+Plot(EM,"MA100",colorWhite, styleThick);
+
+Plot( C, "Price", color, styleBar, Null, Null, 0, 0, 1.5 );
+
+PlotShapes( IIf( Buy, shapeSquare, shapeNone ), colorBlue, 0, L, Offset = -40 );
+PlotShapes( IIf( Buy, shapeSquare, shapeNone ), colorBlue, 0, L, Offset = -50 );
+PlotShapes( IIf( Buy, shapeHollowUpArrow, shapeNone ), colorWhite, 0, L, Offset = -45 );
+PlotShapes( IIf( Short, shapeSquare, shapeNone ), colorYellow, 0, H, Offset = 40 );
+PlotShapes( IIf( Short, shapeSquare, shapeNone ), colorYellow, 0, H, Offset = 50 );
+PlotShapes( IIf( Short, shapeHollowDownArrow, shapeNone ), colorRed, 0, H, Offset = -45 );
+
+PlotShapes( IIf( sell, shapeStar, shapeNone ), colorred, 0, H, 20 );
+PlotShapes( IIf( Cover, shapeStar, shapeNone ), colorBlue, 0, L, -20 );
+
+_SECTION_BEGIN( "Msg Board" );
+
+long = Flip( Buy, Sell );
+shrt = Flip( Short, Cover );
+
+buyt = ExRem( Buy, Sell );
+shortt = ExRem( Short, Cover ) ;
+
+GfxSelectFont( "Century Gothic", 10, 100 , False, True );
+
+GfxSetBkMode( 1 );
+
+GfxSetTextColor( colorWhite );
+
+if( SelectedValue( Shrt ) == 1 )
+{
+    GfxSelectSolidBrush( colorOrange );
+}
+else
+    if( SelectedValue( Long ) == 1 )
+    {
+        GfxSelectSolidBrush( colorDarkBlue );
+    }
+    else
+    {
+        GfxSelectSolidBrush( colorGrey40 );
+    }
+
+Relax = selectedvalue( NOT Long AND NOT Buy AND NOT shrt AND NOT Sell AND NOT short AND NOT Cover );
+
+pxHeight = Status( "pxchartheight" ) ;
+
+xx = Status( "pxchartwidth" );
+
+Left = 100;
+
+width = 50;
+
+x = 5;
+
+x2 = 200;
+
+y = 170;//pxHeight;
+
+GfxSelectPen( colorLightBlue, 1 ); // border color
+
+GfxRoundRect( x, y - 120, x2, y , 7, 7 ) ;//Rectangle Box
+
+GfxTextOut( ( STRATEGY_NAME ), 40, y - 120 ); //Head Line
+
+GfxSelectFont( "Century Gothic", 10, 100 );
+
+Short_Price = ValueWhen( Short, ShortPrice );
+Cover_Price = ValueWhen( Cover, CoverPrice );
+Buy_Price = ValueWhen( Buy, BuyPrice );
+Sell_Price = ValueWhen( Sell, SellPrice );
+
+buyt = ExRem( Buy, Sell );
+shortt = ExRem( Short, Cover ) ;
+sellt = ExRem( Sell, Buy );
+covert = ExRem( Cover, Short );
+
+longg = Flip( Buyt, Sellt ) ;
+shrtt = Flip( Shortt, Covert );
+
+FutureEntryPrice = MyStaticVarGet( 0, "FutureEntryPrice" );
+CurrentSlippage =  MyStaticVarGet( 0, "Slippage" );
+
+Capital = 300000;
+riskpoints = IIf(longg, Buy_Price - btsl, IIf(shrtt, stsl - Short_Price, 0));
+pos_size = Max(Prec (Capital * 0.03 / riskpoints,2), 1);
+SetPositionSize( pos_size, spsShares );
+
+qty = MyStaticVarGet( 0, "Quantity" );
+
+if( selectedValue( Short AND NOT( Short AND Sell ) ) OR selectedValue( Shrt ) )
+{
+    GfxTextOut( "Shorted @ " + Short_Price , 10, y - 100 );
+    GfxTextOut( "Present SL @ " + stsl, 10, y - 80 );
+    GfxTextOut( "PnL = " + NumToStr( (Short_Price - C) * qty * INR_TO_USD / 1000 , 0.2 ), 10, y - 60 );
+    GfxTextOut( "Risk = " + NumToStr( stsl - Short_Price, 0.2 ) , 10, y - 40 );
+    GfxTextOut( "Rs Risk = " + NumToStr( (stsl - Short_Price) * qty * INR_TO_USD / 1000, 0.2 ) , 10, y - 20 );
+}
+
+if( selectedValue( Cover AND NOT( Buy AND Cover ) ) )
+{
+    GfxTextOut( "Covered @ " + Cover_Price, 10, y - 80 );
+    GfxTextOut( "Result  = " + NumToStr( Short_Price - Cover_Price , 0.2 ), 10, y - 60 );
+}
+
+if( selectedValue( Buy AND NOT( Buy AND Cover ) ) OR selectedValue( Long ) )
+{
+    GfxTextOut( "Long @ " + Buy_Price , 10, y - 100 );
+    GfxTextOut( "Present SL @ " + btsl, 10, y - 80 );
+    GfxTextOut( "PnL = " + NumToStr( (C - Buy_Price) * qty * INR_TO_USD / 1000, 0.2 ), 10, y - 60 );
+    GfxTextOut( "Risk = " + NumToStr( Buy_Price - btsl, 0.2 ) , 10, y - 40 );
+    GfxTextOut( "Rs Risk = " + NumToStr( (Buy_Price - btsl) * qty * INR_TO_USD / 1000, 0.2 ) , 10, y - 20 );
+}
+
+if( selectedValue( Sell AND NOT( Short AND Sell ) ) )
+{
+    GfxTextOut( "Squared off @ " + Sell_Price, 10, y - 80 );
+    GfxTextOut( "Result = " + NumToStr( Sell_Price - Buy_Price, 0.2 ), 10, y - 60 );
+}
+
+if( SelectedValue( NOT longg AND NOT shrtt AND NOT sellt AND NOT covert ) )
+{
+    GfxSelectFont( "Century Gothic", 10, 100 );
+    GfxTextOut( "RELAX ZONE", 10, y - 60 );
+    GfxSelectFont( "Century Gothic", 10, 100 );
+    GfxTextOut( "Long outcome = " + NumToStr( Sell_Price - Buy_Price , 0.2 ), 10, y - 40 );
+    GfxTextOut( "Short outcome = " + NumToStr( Short_Price - Cover_Price , 0.2 ), 10, y - 20 );
+}
+
+Plot( IIf( Flip( Buy, Ref( Buy, -4 ) ), BuyPrice, Null ), "BuyPrice", colorGreen, styleThick );
+Plot( IIf( Flip( Short, Ref( short, -4 ) ), ShortPrice, Null ), "ShortPrice", colorred, styleThick );
+
+///////////////////////////////////////////////////////////////////////////////
+
+btsl = iif(reversal_long OR reversal_long1,Ref(btsl,-1),btsl);
+stsl = iif(reversal_short OR reversal_short1,Ref(stsl,-1),stsl);
+
