@@ -1,4 +1,4 @@
-STRATEGY_NAME 	= "NATGASmini Test";
+STRATEGY_NAME 	= "NATURALGAS Test";
 ACCOUNTS = "NSMTest";
 CAPITALS = "1000000";
 MARGIN_PER_LOT = 10000;
@@ -62,7 +62,7 @@ iShortRE = Cross( f30mL, L ) AND shortzone ;
 iShortRE = Cross( Ref( DL, -1 ), L ) AND shortzone ;
 iShortRE = Cross( Suppport, L ) AND shortzone ;
 
-AT = Ref( ATR( 10 ), -1 ) * 2.5; //ATR value
+AT = Ref( ATR( 10 ), -1 ) * 3; //ATR value
 AggressiveAT = AT * 1.5; //ATR value
 
 bts = HighestSince( iBuy , Ref( C, -1 ) - at );
@@ -137,7 +137,7 @@ for( i = 0; i < BarCount; i++ )
 
         if( Buy[i] )
         {
-            btsl[i] = bts[i] + ( AT[i] * 0.1 );
+            btsl[i] = bts[i] + ( AT[i] * 0.2 );
         }
         else
             if( agb[i] AND NOT reversal_long1[i] )
@@ -206,7 +206,7 @@ for( i = 0; i < BarCount; i++ )
     {
         if( Short[i] )
         {
-            stsl[i] = sts[i] - ( AT[i] * 0.1 );
+            stsl[i] = sts[i] - ( AT[i] * 0.2 );
 
         }
         else
@@ -263,8 +263,8 @@ ShortPrice = ValueWhen( Short, ShortPrice );
 SellPrice = ValueWhen( Sell, SellPrice );
 CoverPrice = ValueWhen( Cover, CoverPrice );
 
-btsl = Max( Suppport, btsl );
-stsl = min( stsl, Resistance );
+btsl = floor((Max( Suppport, btsl ))/0.1)*0.1;
+stsl = ceil((min( stsl, Resistance ))/0.1)*0.1;
 
 Plot( IIf( shrt , stsl, Null ), "stsl", colorRed );
 Plot( IIf( long , btsl, Null ), "btsl", colorRed );
@@ -355,9 +355,14 @@ FutureEntryPrice = MyStaticVarGet( 0, "FutureEntryPrice" );
 CurrentSlippage =  MyStaticVarGet( 0, "Slippage" );
 
 Capital = 300000;
-riskpoints = IIf(longg, Buy_Price - btsl, IIf(shrtt, stsl - Short_Price, 0));
-pos_size = Max(Prec (Capital * 0.03 / riskpoints,2), 1);
-SetPositionSize( pos_size, spsShares );
+riskpoints = IIf(longg, Buy_Price - ValueWhen(Buy,btsl), IIf(shrtt, ValueWhen(short,stsl) - Short_Price, 0));
+pos_size = round( ((Capital * 0.03) / riskpoints)/250 ) * 250;
+
+SetPositionSize( 1, spsShares );
+
+Filter = Buy OR Short;
+AddColumn(riskpoints,"RISK POINTS");
+
 
 qty = MyStaticVarGet( 0, "Quantity" );
 
@@ -407,4 +412,3 @@ Plot( IIf( Flip( Short, Ref( short, -4 ) ), ShortPrice, Null ), "ShortPrice", co
 
 btsl = iif(reversal_long OR reversal_long1,Ref(btsl,-1),btsl);
 stsl = iif(reversal_short OR reversal_short1,Ref(stsl,-1),stsl);
-
