@@ -21,9 +21,6 @@ lastcandle = 0;
 
 period = 6;
 
-//EM = ( LinearReg( C, 20 ) + ema( C, 100 ) ) / 2;
-EM = ( LinearReg( C, 50 ));//For ETHUSD
-//EM = ema(C,100);
 Resistance = Ref( HHV( H, period ), -1 );
 Suppport = Ref( LLV( L, period ), -1 );
 
@@ -38,15 +35,6 @@ iSell = ExRem( iSell, iBuy );
 iCover = ExRem( iCover, iShort );
 
 color = ( IIf( Flip( iBuy, iSell ), colorGreen, colorRed ) );
-
-//pos = Ref(C > EM,-1)  ;
-//neg = Ref(C < EM,-1)  ;
-
-//pos = Ref(H>EM,-1)  ;
-//neg = Ref(L<EM,-1) ;
-
-neg = Ref( L < EM AND( ( em - L ) > ( L * 0.0002 ) ), -1 );
-pos = Ref( H > EM AND( ( h - em ) > ( h * 0.0002 ) ), -1 );
 
 buyzone = Flip( iBuy, iSell );
 f30mH = ValueWhen( newday, H );
@@ -91,7 +79,7 @@ pdc = TimeFrameGetPrice( "C", inDaily, -1 );
 dopen = ValueWhen( newday, O );
 fcc = ValueWhen( newday, C );
 
-agrss_move = ( dh - dl ) > ( DATR * 2 );
+agrss_move = ( dh - dl ) > ( DATR * 1.5 );
 agrss_move = flip( agrss_move, newday );
 
 reversal_short = ( ( fcc < pdl ) AND( ( C > O ) AND( abs( H - C ) < abs( H - L ) * 0.3 ) ) ) AND( Flip( newday, Ref( newday, -4 ) ) );
@@ -100,19 +88,38 @@ reversal_long = ( fcc > pdh ) AND( ( C < O ) AND( abs( L - C ) < abs( H - L ) * 
 agb = 0;
 ags = 0;
 
-upt = ref( HighestSince( iBuy, H + ( DATR * 1.5 ) ), -1 );
-downt = ref( LowestSince( iShort, L - ( DATR * 1.5 ) ), -1 );
+upt = ref( HighestSince( iBuy, Ref(H,-2) + ( AT * 3 ) ), -1 );
+downt = ref( LowestSince( iShort, Ref(L,-2) - ( AT * 3 ) ), -1 );
 reversal_long1 = Ref( H, -1 ) > ref( upt, -1 ) ;
 reversal_short1 = Ref( L, -1 ) < ref( downt, -1 );
 
 time = TimeNum();
 
-entryzone= time < 230000;
+entryzone= time > 093000 and time < 223000;
+
+ExitTime = 223000;
+
+rs = Ref(RSI(14),-1);
+
+//rsfilterBuy = rs < Ref(rs,-1);
+//rsfilterShort = rs < Ref(rs,-1);
+
+rsfilterBuy = rs < Ref(rs,-1) AND rs > 60;
+rsfilterShort = rs < Ref(rs,-1) AND rs <40;
+
+poscheck = Ref(Flip( iBuy, iSell ),-1);
+negcheck = Ref(Flip( iShort, iCover ),-1);
+
+//momentum
+ad = Ref(ADX(14),-1);
+momentum = rs > 60 OR rs <50   ; 
+//momentum = ad > 25;
+
 
 for( i = 0; i < BarCount; i++ )
 {
 
-    if( ( H[i] > Resistance[i] OR iBuyRE[i] ) AND pos[i] AND NOT newday[i] AND entryzone[i] AND bf == 0 )
+    if( ( H[i] > Resistance[i] OR iBuyRE[i] ) AND entryzone[i] AND poscheck[i] AND momentum[i] AND NOT newday[i]  AND bf == 0 )
     {
         Buy[i] = 1;
         bf = 1;
@@ -170,7 +177,7 @@ for( i = 0; i < BarCount; i++ )
     }
 
 
-    if( ( iSell[i] OR L[i] < btsl[i] OR (time[i] > 230000) ) AND bf == 1 )
+    if( ( iSell[i] OR L[i] < btsl[i]  ) AND bf == 1 )
     {
         Sell[i] = 1;
         bf = 0;
@@ -184,7 +191,7 @@ for( i = 0; i < BarCount; i++ )
                 if( sellgap[i] ) SellPrice[i] = C[i];
     }
 
-    if( ( L[i] < Suppport[i] OR iShortRE[i] ) AND neg[i] AND NOT newday[i] AND entryzone[i] AND sf == 0 )
+    if( ( L[i] < Suppport[i] OR iShortRE[i] ) AND entryzone[i]  AND negcheck[i] AND momentum[i] AND NOT newday[i]   AND sf == 0 )
     {
         Short[i] = 1;
         sf = 1;
@@ -240,7 +247,7 @@ for( i = 0; i < BarCount; i++ )
                     }
     }
 
-    if( ( iCover[i] OR H[i] > stsl[i] OR (time[i] > 230000) ) AND sf == 1 )
+    if( ( iCover[i] OR H[i] > stsl[i]  ) AND sf == 1 )
     {
         cover[i] = 1;
         sf = 0;
@@ -272,7 +279,7 @@ Plot( IIf( long , btsl, Null ), "btsl", colorRed );
 //Plot(Resistance,"HHV",colorRed);
 //Plot(Suppport,"LLV",colorgreen);
 
-Plot(EM,"MA100",colorWhite, styleThick);
+//Plot(EM,"MA100",colorWhite, styleThick);
 
 Plot( C, "Price", color, styleBar, Null, Null, 0, 0, 1.5 );
 
