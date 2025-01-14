@@ -78,12 +78,14 @@ pdl = TimeFrameGetPrice( "L", inDaily, -1 );
 pdc = TimeFrameGetPrice( "C", inDaily, -1 );
 dopen = ValueWhen( newday, O );
 fcc = ValueWhen( newday, C );
+val = pdl + ((pdh-pdl)*0.2);
+vah = pdh - ((pdh-pdl)*0.2);
 
 agrss_move = ( dh - dl ) > ( DATR * 1.5 );
 agrss_move = flip( agrss_move, newday );
 
-reversal_short = ( ( fcc < pdl ) AND( ( C > O ) AND( abs( H - C ) < abs( H - L ) * 0.3 ) ) ) AND( Flip( newday, Ref( newday, -4 ) ) );
-reversal_long = ( fcc > pdh ) AND( ( C < O ) AND( abs( L - C ) < abs( H - L ) * 0.3 ) ) AND( Flip( newday, Ref( newday, -4 ) ) );
+reversal_short = ( ( fcc < val ) AND( ( C > O ) AND( abs( H - C ) < abs( H - L ) * 0.3 ) ) ) AND( Flip( newday, Ref( newday, -4 ) ) );
+reversal_long = ( fcc > vah ) AND( ( C < O ) AND( abs( L - C ) < abs( H - L ) * 0.3 ) ) AND( Flip( newday, Ref( newday, -4 ) ) );
 
 agb = 0;
 ags = 0;
@@ -241,8 +243,6 @@ Plot( IIf( long , btsl, Null ), "btsl", colorRed );
 
 //Plot(Resistance,"HHV",colorRed);
 //Plot(Suppport,"LLV",colorgreen);
-
-//Plot(EM,"MA100",colorWhite, styleThick);
 
 Plot( C, "Price", color, styleBar, Null, Null, 0, 0, 1.5 );
 
